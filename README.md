@@ -107,7 +107,13 @@ This confirms the model is detecting **resonance changes** (frequency structure)
 ├── results/                 # Output predictions, logs, and metrics
 │   └── figures/             # Auto-generated graphs (Confusion Matrix, RMSE, etc.)
 │
-└── README.md
+├── docs/                    # Project reports and documentation
+│   ├── lab_report.docx      # English Laboratory Report
+│   ├── ML_Report_Hebrew.pdf # Final Project Report (Hebrew)
+│   └── documantation.docx   # Internal engineering logic and graph explanations
+│
+├── requirements.txt         # Python dependencies
+└── README.md                # This file
 ```
 ---
 
