@@ -11,7 +11,7 @@ When water is poured into a cup, the acoustic resonance of the vessel changes as
 Submitted as a Machine Learning course project at **Sami Shamoon College of Engineering (SCE)**, Department of Electrical and Electronics Engineering.
 
 **Lecturer:** Dmitry Bakhovsky  
-**Authors:** Tomer Nur Milkov, Nikita Budovsky, Oren, Or
+**Authors:** Tomer Nur Milkov, Nikita Budovski, Oren, Or
 
 ---
 
