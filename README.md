@@ -117,7 +117,7 @@ This confirms the model is detecting **resonance changes** (frequency structure)
 Ensure you have Python 3.10+ installed, then install the required dependencies:
 
 ```bash
-pip install numpy pandas matplotlib librosa scipy scikit-learn soundfile joblib
+pip install -r requirements.txt
 ```
 ### Running the Pipeline
 Place your raw `.wav` recordings inside `data/raw/` (organized by cup folders), then run the scripts from the root directory in sequential order:
