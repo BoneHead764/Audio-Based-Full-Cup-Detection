@@ -1,43 +1,43 @@
-# 🥤 Cup Fill Level Detector
+# 🥤 Acoustic Cup-Fill Detection
 
-A machine learning system that identifies whether a cup is nearly full by analyzing audio recordings — no cameras, no weight sensors, just sound.
+An automated machine learning system capable of determining the optimal moment to stop pouring water into a cup using only passive acoustic sensing (audio signals) — no cameras, no weight sensors, just sound.
 
 ---
 
-## Overview
+## 📖 Overview
 
 When water is poured into a cup, the acoustic resonance of the vessel changes as the water level rises. This project captures those changes using a microphone, extracts audio features, and trains a classifier to distinguish between "not full" and "nearly full" states.
 
 Submitted as a Machine Learning course project at **Sami Shamoon College of Engineering (SCE)**, Department of Electrical and Electronics Engineering.
 
-**Presenter:** Dmitri Bakhobsky  
-**Authors:** Tomer Nor Milkov, Nikita Bodovsky, Oren, Or
+**Lecturer:** Dmitry Bakhovsky  
+**Authors:** Tomer Nur Milkov, Nikita Budovsky, Oren, Or
 
 ---
 
-## How It Works
+## ⚙️ How It Works
 
-1. **Record** water being poured into a cup (empty → full)
-2. **Slice** each recording into 0.5-second windows
-3. **Extract** acoustic features from every window
-4. **Label** windows: last 10% of the recording = `1` (full), rest = `0` (not full)
-5. **Train** a classifier on those labeled features
-6. **Predict** fill state from new audio in real time
-
----
-
-## Dataset
-
-- **119 recordings** across 8 cup types
-- **Cup materials:** Glass (×4), Plastic, Cardboard (×3)
-- **~15 recordings per cup type** for balanced representation
-- **1,495 samples** total after windowing
-
-Recordings were made under consistent conditions: same room, same tap, fixed microphone distance, quiet environment.
+Our system operates through a sequential pipeline:
+1. **Record** water being poured into a cup (empty → full).
+2. **Slice** each recording into 0.5-second time windows.
+3. **Extract** acoustic features (MFCCs, Spectral Centroid, etc.) from every window.
+4. **Train** a classifier using GroupKFold cross-validation to predict the fill percentage.
+5. **Real-Time Logic:** Apply a moving average and enforce physical monotonicity to trigger a reliable "stop" command when the cup hits 90% capacity.
 
 ---
 
-## Features Extracted
+## 🗂️ Dataset
+
+- **120 recordings** across 8 cup types.
+- **Cup materials:** Glass, Plastic, Cardboard.
+- **~15 recordings per cup type** for balanced representation.
+- **1,495 samples** total after windowing.
+
+Recordings were made under consistent conditions: same room, same tap, fixed microphone distance, and a quiet environment.
+
+---
+
+## 🎛️ Features Extracted
 
 For each 0.5-second audio window, the following features are computed (mean + std = 2 values each):
 
@@ -54,9 +54,9 @@ For each 0.5-second audio window, the following features are computed (mean + st
 
 ---
 
-## Models Evaluated
+## 🧠 Models Evaluated
 
-All models were evaluated with **5-Fold GroupKFold Cross-Validation**, grouping by recording to prevent data leakage between windows from the same file.
+All models were evaluated with **GroupKFold Cross-Validation**, grouping by recording to prevent data leakage between windows from the same file.
 
 | Model | Accuracy | Precision | Recall | F1 |
 |---|---|---|---|---|
@@ -64,125 +64,102 @@ All models were evaluated with **5-Fold GroupKFold Cross-Validation**, grouping 
 | k-NN (k=5) | 96.12% | 75.29% | 62.58% | 68.07% |
 | **Random Forest** | **96.32%** | **83.93%** | 56.47% | **67.18%** |
 
-**Random Forest** was selected as the final model for its highest accuracy and precision, and its ability to provide feature importance analysis.
+**Random Forest** was selected as the final baseline model for its high accuracy and precision, though advanced tests with LightGBM have pushed F1 scores even higher (F1 = 0.868, AUC-ROC = 0.961).
 
 ### Confusion Matrix (Random Forest)
 
-|  | Predicted: Not Full | Predicted: Full |
+| | Predicted: Not Full | Predicted: Full |
 |---|---|---|
 | **Actual: Not Full** | 1384 ✅ | 12 ❌ |
 | **Actual: Full** | 43 ❌ | 56 ✅ |
 
 ---
 
-## Top Features (Feature Importance)
+## 🔍 Top Features (Feature Importance)
 
-The Random Forest model revealed that **MFCC features dominate** the decision — particularly their standard deviation, which captures how much the spectral shape varies within each window.
+The model revealed that **MFCC features dominate** the decision — particularly their standard deviation, which captures how much the spectral shape varies within each window.
 
-```
-1. mfcc_0_std       ~0.083
-2. mfcc_2_mean      ~0.060
-3. mfcc_5_mean      ~0.057
-4. mfcc_1_std       ~0.053
-5. bandwidth_mean   ~0.051
-6. centroid_std     ~0.045
-7. rms_mean         ~0.041
-8. mfcc_0_mean      ~0.039
-9. mfcc_3_mean      ~0.038
-10. rolloff_std     ~0.035
-```
+1. `mfcc_0_std` (~0.083)
+2. `mfcc_2_mean` (~0.060)
+3. `mfcc_5_mean` (~0.057)
+4. `mfcc_1_std` (~0.053)
+5. `bandwidth_mean` (~0.051)
 
-This confirms the model is detecting **resonance changes** (frequency structure), not just volume.
+This confirms the model is detecting **resonance changes** (frequency structure), perfectly aligning with Helmholtz resonance theory, rather than just listening for volume.
 
 ---
 
-## Project Structure
+## 📂 Project Structure
 
-```
+```text
 .
-├── recordings/              # Raw WAV recordings, organized by cup type
-│   ├── Glass 1/
-│   ├── Glass 2/
-│   ├── Plastic/
-│   └── ...
+├── data/
+│   ├── raw/                 # Put your raw .wav recordings here 
+│   └── processed/           # Generated windows_index.csv and features.csv
 │
-├── build_dataset.py         # Slice recordings → extract features → save CSV
-├── train_model.py           # Train & evaluate all models with cross-validation
-├── RandomForest.py          # Train and save the final production model
-├── FirstCode.py             # Exploratory: waveform visualization
+├── src/                     # Python pipeline scripts
+│   ├── build_dataset.py     # Step 1: Slices audio into windows
+│   ├── features.py          # Step 2: Extracts MFCCs, Rolloff, etc.
+│   ├── train.py             # Step 3: Trains models & calculates metrics
+│   ├── realtime_decision.py # Step 4: Applies moving average and 90% stop logic
+│   └── plots.py             # Step 5: Generates graphs for reports
 │
-├── dataset_graph.py         # Plot recording counts per cup type
-├── confusion_matrix_graph.py# Plot the Random Forest confusion matrix
-├── model_comparison_graph.py# Bar chart comparing model metrics
+├── results/                 # Output predictions, logs, and metrics
+│   └── figures/             # Auto-generated graphs (Confusion Matrix, RMSE, etc.)
 │
-├── water_dataset.csv        # Generated feature dataset
-├── final_water_model.pkl    # Saved Random Forest model (joblib)
-│
-└── dataset_distribution.png
-    confusion_matrix.png
-    feature_importance.png
-    model_comparison.png
+└── README.md
 ```
-
 ---
 
-## Setup & Usage
+## 🚀 Setup & Usage
 
 ### Requirements
+Ensure you have Python 3.10+ installed, then install the required dependencies:
 
 ```bash
-pip install librosa numpy pandas scikit-learn matplotlib joblib
+pip install numpy pandas matplotlib librosa scipy scikit-learn soundfile joblib
+```
+### Running the Pipeline
+Place your raw `.wav` recordings inside `data/raw/` (organized by cup folders), then run the scripts from the root directory in sequential order:
+
+**1. Build the dataset index**
+```bash
+python src/build_dataset.py
 ```
 
-### 1. Build the dataset
-
-Place your WAV recordings under `recordings/<cup_type>/` then run:
-
+**2. Extract acoustic features**
 ```bash
-python build_dataset.py
+python src/features.py
 ```
 
-This produces `water_dataset.csv`.
-
-### 2. Train and evaluate models
-
+**3. Train models and generate predictions**
 ```bash
-python train_model.py
+python src/train.py
 ```
 
-Prints cross-validation scores, confusion matrix, and classification report for all three models. Also outputs feature importance rankings.
-
-### 3. Save the final model
-
+**4. Apply smoothing and real-time stop logic**
 ```bash
-python RandomForest.py
+python src/realtime_decision.py
 ```
-
-Saves `final_water_model.pkl` for deployment.
-
-### 4. Generate charts
-
+**5. Generate visual evaluation charts**
 ```bash
-python dataset_graph.py
-python model_comparison_graph.py
-python confusion_matrix_graph.py
+python src/plots.py
 ```
 
 ---
 
-## Key Findings
+## 📊 Key Findings
 
-- **Acoustic-only detection works.** A Random Forest classifier achieves ~96% accuracy with no visual or weight sensors.
-- **MFCC features are most informative.** The spectral shape of the sound, not its volume, is what gives away the fill level.
-- **GroupKFold is essential.** Without grouping by recording, windows from the same recording appear in both train and test sets, inflating scores artificially.
-- **Recall for "full" class is the main challenge** (56%). The "full" class is rare (last 10% of recordings), creating class imbalance. Future work: SMOTE oversampling, adjusted class weights, or a lower classification threshold.
+- **Acoustic-only detection works.** A classifier can accurately trigger a stop command with an average latency of just +0.08 to +0.10 seconds without visual or weight sensors.
+- **Spectral shape is key.** The spectral shape of the sound, not its volume, is what gives away the fill level.
+- **Physical Smoothing is essential.** Applying a rolling average and enforcing monotonicity prevents sudden splashing noises from triggering false-positive stops.
+- **GroupKFold prevents leakage.** Without grouping by recording, windows from the same recording appear in both train and test sets, artificially inflating scores.
 
 ---
 
-## Future Improvements
+## 🔮 Future Improvements
 
-- Larger, more diverse dataset (more cup types, sizes, materials)
-- More precise labeling of the actual moment the cup becomes full
-- Evaluation in noisy environments
-- Real-time inference pipeline (stream audio → predict → alert)
-- Deep learning approaches (CNN on spectrograms, LSTM on feature sequences)
+- Larger, more diverse dataset (more cup types, sizes, materials).
+- Data augmentation with background noise to improve robustness in active environments.
+- Real-time streaming implementation for embedded hardware deployment.
+- Online adaptation to new cup types using few-shot learning.
