@@ -87,7 +87,9 @@ The top feature groups driving the LightGBM decisions are visualized in `images/
 ├── data/
 │   ├── raw/                   # Raw .wav recordings
 │   ├── clean/                 # Noise-reduced audio files
-│   └── features_labeled.csv   # Final extracted dataset
+│   ├── processed/             # Subfolder for windowed baseline data
+│   │   └── features.csv       # Windowed classical regression dataset
+│   └── features_labeled.csv   # Final frame-level classification dataset
 │
 ├── src/                       # Python pipeline scripts
 │   ├── whitenoise.py          # Step 1: Applies non-stationary noise reduction
@@ -99,15 +101,15 @@ The top feature groups driving the LightGBM decisions are visualized in `images/
 ├── models/                    # Model binary and tuning performance metrics
 │   ├── best_model.pkl         # Saved production LightGBM pipeline
 │   ├── results_summary.csv    # Cross-validation performance comparisons
-│   ├── results_extended.csv
+│   ├── results_extended.csv   # Deep metric breakdowns per configuration
 │   └── ablation_results.csv   # Feature contribution and ablation analysis
 │
 ├── images/                    # Visual assets rendered in documentation
 │   ├── 01_fill_level.png
 │   ├── 02_probability.png
 │   ├── 03_spectrogram_centroid.png
-│   ├──model_comparison.png
-│   ├──feature_importance_LightGBM.png
+│   ├── model_comparison.png
+│   ├── feature_importance_LightGBM.png
 │   └── feature_importance_Gradient_Boosting.png
 │
 ├── docs/                      # Project reports and documentation
