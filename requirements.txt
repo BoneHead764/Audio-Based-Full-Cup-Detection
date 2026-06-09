@@ -4,5 +4,7 @@ matplotlib
 librosa
 scipy
 scikit-learn
-soundfile
 joblib
+noisereduce
+lightgbm
+xgboost
