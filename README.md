@@ -94,26 +94,27 @@ This confirms the model is detecting **resonance changes** (frequency structure)
 ```text
 .
 ├── data/
-│   ├── raw/                 # Put your raw .wav recordings here 
-│   └── processed/           # Generated windows_index.csv and features.csv
+│   ├── raw/                   # Raw .wav recordings
+│   ├── clean/                 # Noise-reduced audio files
+│   └── features_labeled.csv   # Final extracted dataset
 │
-├── src/                     # Python pipeline scripts
-│   ├── build_dataset.py     # Step 1: Slices audio into windows
-│   ├── features.py          # Step 2: Extracts MFCCs, Rolloff, etc.
-│   ├── train.py             # Step 3: Trains models & calculates metrics
-│   ├── realtime_decision.py # Step 4: Applies moving average and 90% stop logic
-│   └── plots.py             # Step 5: Generates graphs for reports
+├── src/                       # Python pipeline scripts
+│   ├── whitenoise.py          # Step 1: Applies non-stationary noise reduction
+│   ├── label_and_extract.py   # Step 2: Extracts targeted MFCCs & derivatives
+│   ├── tune_models.py         # Step 3: Trains & tunes LightGBM / XGBoost
+│   ├── plot_prediction.py     # Step 4: Visualizes real-time moving averages
+│   └── plot_spectrogram.py    # Step 5: Visualizes Helmholtz resonance
 │
-├── results/                 # Output predictions, logs, and metrics
-│   └── figures/             # Auto-generated graphs (Confusion Matrix, RMSE, etc.)
+├── models/                    # Saved best_model.pkl
 │
-├── docs/                    # Project reports and documentation
-│   ├── lab_report.docx      # English Laboratory Report
-│   ├── ML_Report_Hebrew.pdf # Final Project Report (Hebrew)
-│   └── documantation.docx   # Internal engineering logic and graph explanations
+├── docs/                      # Project reports and documentation
+│   ├── lab_report.docx        # English Laboratory Report
+│   ├── ML_Report_Hebrew.pdf   # Final Project Report (Hebrew)
+│   └── documantation.docx     # Internal engineering logic
 │
-├── requirements.txt         # Python dependencies
-└── README.md                # This file
+├── .gitignore
+├── requirements.txt
+└── README.md
 ```
 ---
 
@@ -128,39 +129,38 @@ pip install -r requirements.txt
 ### Running the Pipeline
 Place your raw `.wav` recordings inside `data/raw/` (organized by cup folders), then run the scripts from the root directory in sequential order:
 
-**1. Build the dataset index**
+**1. Clean Background Noise**
 ```bash
-python src/build_dataset.py
+python src/whitenoise.py
 ```
 
-**2. Extract acoustic features**
+**2. Extract & Label Features**
 ```bash
-python src/features.py
+python src/label_and_extract.py
 ```
 
-**3. Train models and generate predictions**
+**3. Train & Tune Models**
 ```bash
-python src/train.py
+python src/tune_models.py
 ```
 
-**4. Apply smoothing and real-time stop logic**
+**4. Generate Prediction Dashboards**
 ```bash
-python src/realtime_decision.py
+python src/plot_prediction.py
 ```
-**5. Generate visual evaluation charts**
+**5. Visualize Acoustic Resonance**
 ```bash
-python src/plots.py
+python src/plot_spectrogram.py
 ```
 
 ---
 
 ## 📊 Key Findings
 
-- **Acoustic-only detection works.** A classifier can accurately trigger a stop command with an average latency of just +0.08 to +0.10 seconds without visual or weight sensors.
-- **Spectral shape is key.** The spectral shape of the sound, not its volume, is what gives away the fill level.
-- **Physical Smoothing is essential.** Applying a rolling average and enforcing monotonicity prevents sudden splashing noises from triggering false-positive stops.
+- **Acoustic-only detection works.** A LightGBM classifier achieves an F1-Score of 0.868, accurately triggering a stop command with an average latency of just +0.08 seconds.
+- **Spectral shape is key.** The spectral centroid and MFCC derivatives track the Helmholtz resonance, proving the model relies on physical acoustic shifts rather than just volume.
+- **Physical Smoothing is essential.** Applying a rolling causal average and enforcing monotonicity prevents sudden splashing noises from triggering false-positive stops.
 - **GroupKFold prevents leakage.** Without grouping by recording, windows from the same recording appear in both train and test sets, artificially inflating scores.
-
 ---
 
 ## 🔮 Future Improvements
