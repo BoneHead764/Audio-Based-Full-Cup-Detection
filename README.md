@@ -18,11 +18,11 @@ Submitted as a Machine Learning course project at **Sami Shamoon College of Engi
 ## ⚙️ How It Works
 
 Our system operates through a sequential pipeline:
-1. **Record** water being poured into a cup (empty → full).
-2. **Slice** each recording into 0.5-second time windows.
-3. **Extract** acoustic features (MFCCs, Spectral Centroid, etc.) from every window.
-4. **Train** a classifier using GroupKFold cross-validation to predict the fill percentage.
-5. **Real-Time Logic:** Apply a moving average and enforce physical monotonicity to trigger a reliable "stop" command when the cup hits 90% capacity.
+1. **Record & Clean:** Capture liquid pouring audio, applying non-stationary noise profiling to strip out ambient faucet/pump hums.
+2. **Trim & Frame:** Isolate the true boundaries of the pour event automatically, slicing signal streams into highly responsive 50ms frames with a 50% overlap.
+3. **Extract Transient Features:** Map frequencies within the 1000Hz - 8000Hz band to compute 13 MFCCs alongside their velocity ($\Delta$) and acceleration ($\Delta^2$) derivatives.
+4. **Train & Tune Gradient Boosters:** Train a LightGBM binary classifier via optimized parameter search using GroupKFold cross-validation to recognize the final $\ge 90\%$ capacity point.
+5. **Real-Time Guardrails:** Run model probability projections through a 10-frame causal moving average to prevent immediate splash artifacts from triggering early faucet closures.
 
 ---
 
@@ -39,7 +39,7 @@ Recordings were made under consistent conditions: same room, same tap, fixed mic
 
 ## 🎛️ Features Extracted
 
-For each 0.5-second audio window, the following features are computed (mean + std = 2 values each):
+For each 50ms audio frame, the pipeline concentrates feature extraction inside the primary liquid resonance passband (1000 Hz to 8000 Hz):
 
 | Feature | Description |
 |---|---|
@@ -50,43 +50,34 @@ For each 0.5-second audio window, the following features are computed (mean + st
 | **Spectral Bandwidth** | Spread of energy around the centroid |
 | **Spectral Rolloff** | Frequency below which 85% of energy falls |
 
-**Total: 32 features per sample**
+**Total: 56 features per sample (including dynamic delta/delta2 differentials and spectral contrast bands)**
 
 ---
 
 ## 🧠 Models Evaluated
 
-All models were evaluated with **GroupKFold Cross-Validation**, grouping by recording to prevent data leakage between windows from the same file.
+All models were evaluated with **GroupKFold Cross-Validation** (5 folds), grouping by recording file to prevent window leakage. Models were optimized to balance micro-latency against false-positive premature stops.
 
-| Model | Accuracy | Precision | Recall | F1 |
-|---|---|---|---|---|
-| Logistic Regression | 95.85% | 77.71% | 53.37% | 62.76% |
-| k-NN (k=5) | 96.12% | 75.29% | 62.58% | 68.07% |
-| **Random Forest** | **96.32%** | **83.93%** | 56.47% | **67.18%** |
+| Model | Precision | Recall | F1-Score | AUC-ROC | Avg Latency ($\Delta t$) |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **LightGBM** | **78.11%** | **97.62%** | **0.868** | **0.961** | **+0.08 s** |
+| Random Forest | 67.81% | 73.06% | 0.703 | 0.947 | -1.90 s |
+| Extra Trees | 68.34% | 72.37% | 0.702 | 0.949 | -1.76 s |
+| HistGradientBoosting | 60.92% | 80.49% | 0.692 | 0.955 | -2.19 s |
 
-**Random Forest** was selected as the final baseline model for its high accuracy and precision, though advanced tests with LightGBM have pushed F1 scores even higher (F1 = 0.868, AUC-ROC = 0.961).
-
-### Confusion Matrix (Random Forest)
-
-| | Predicted: Not Full | Predicted: Full |
-|---|---|---|
-| **Actual: Not Full** | 1384 ✅ | 12 ❌ |
-| **Actual: Full** | 43 ❌ | 56 ✅ |
-
+*Note: LightGBM vastly outperforms classical configurations due to gradient-based one-side sampling, achieving an exceptionally high recall (97.62%), meaning it almost never misses a true full event, while maintaining a remarkably precise stop latency.*
 ---
 
-## 🔍 Top Features (Feature Importance)
+## 🔍 Feature Ablation & Importance
 
-The model revealed that **MFCC features dominate** the decision — particularly their standard deviation, which captures how much the spectral shape varies within each window.
+Ablation analysis (`ablation_results.csv`) confirmed that modeling the **temporal velocity** of the acoustic change is crucial:
+- **All Features (56):** F1 = **0.868**, AUC-ROC = **0.961**
+- **No Delta/Delta-Delta (28):** F1 = 0.585, AUC-ROC = 0.932
+- **MFCC Baseline Only (19):** F1 = 0.573, AUC-ROC = 0.911
 
-1. `mfcc_0_std` (~0.083)
-2. `mfcc_2_mean` (~0.060)
-3. `mfcc_5_mean` (~0.057)
-4. `mfcc_1_std` (~0.053)
-5. `bandwidth_mean` (~0.051)
+This proves that the classifier is tracking the *dynamic path* of the Helmholtz resonance shift as the physical empty volume of the cup contracts, rather than static volume thresholds.
 
-This confirms the model is detecting **resonance changes** (frequency structure), perfectly aligning with Helmholtz resonance theory, rather than just listening for volume.
-
+The top feature groups driving the LightGBM decisions are visualized in `images/feature_importance_LightGBM.png`.
 ---
 
 ## 📂 Project Structure
@@ -105,7 +96,19 @@ This confirms the model is detecting **resonance changes** (frequency structure)
 │   ├── plot_prediction.py     # Step 4: Visualizes real-time moving averages
 │   └── plot_spectrogram.py    # Step 5: Visualizes Helmholtz resonance
 │
-├── models/                    # Saved best_model.pkl
+├── models/                    # Model binary and tuning performance metrics
+│   ├── best_model.pkl         # Saved production LightGBM pipeline
+│   ├── results_summary.csv    # Cross-validation performance comparisons
+│   ├── results_extended.csv
+│   └── ablation_results.csv   # Feature contribution and ablation analysis
+│
+├── images/                    # Visual assets rendered in documentation
+│   ├── 01_fill_level.png
+│   ├── 02_probability.png
+│   ├── 03_spectrogram_centroid.png
+│   ├──model_comparison.png
+│   ├──feature_importance_LightGBM.png
+│   └── feature_importance_Gradient_Boosting.png
 │
 ├── docs/                      # Project reports and documentation
 │   ├── lab_report.docx        # English Laboratory Report
@@ -161,16 +164,19 @@ python src/plot_spectrogram.py
 - **Spectral shape is key.** The spectral centroid and MFCC derivatives track the Helmholtz resonance, proving the model relies on physical acoustic shifts rather than just volume.
 - **Physical Smoothing is essential.** Applying a rolling causal average and enforcing monotonicity prevents sudden splashing noises from triggering false-positive stops.
 - **GroupKFold prevents leakage.** Without grouping by recording, windows from the same recording appear in both train and test sets, artificially inflating scores.
----
-  ### Visualizing Model Performance
 
+---
+
+### Visualizing Model Performance
+
+![Model Baseline Comparisons](images/model_comparison.png)
 ![Fill Level Tracking](images/01_fill_level.png)
 ![Model Prediction Probability](images/02_probability.png)
 ![Spectrogram & Spectral Centroid](images/03_spectrogram_centroid.png)
+
 ---
 
 ## 🔮 Future Improvements
-
 - Larger, more diverse dataset (more cup types, sizes, materials).
 - Data augmentation with background noise to improve robustness in active environments.
 - Real-time streaming implementation for embedded hardware deployment.
