@@ -162,6 +162,12 @@ python src/plot_spectrogram.py
 - **Physical Smoothing is essential.** Applying a rolling causal average and enforcing monotonicity prevents sudden splashing noises from triggering false-positive stops.
 - **GroupKFold prevents leakage.** Without grouping by recording, windows from the same recording appear in both train and test sets, artificially inflating scores.
 ---
+  ### Visualizing Model Performance
+
+![Fill Level Tracking](images/01_fill_level.png)
+![Model Prediction Probability](images/02_probability.png)
+![Spectrogram & Spectral Centroid](images/03_spectrogram_centroid.png)
+---
 
 ## 🔮 Future Improvements
 
