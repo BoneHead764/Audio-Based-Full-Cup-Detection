@@ -1,1 +1,10 @@
-
+numpy
+pandas
+matplotlib
+librosa
+scipy
+scikit-learn
+joblib
+noisereduce
+lightgbm
+xgboost

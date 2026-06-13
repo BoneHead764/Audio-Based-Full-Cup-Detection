@@ -1,45 +1,45 @@
-# 🥤 Cup Fill Level Detector
+# 🥤 Acoustic Cup-Fill Detection
 
-A machine learning system that identifies whether a cup is nearly full by analyzing audio recordings — no cameras, no weight sensors, just sound.
+An automated machine learning system capable of determining the optimal moment to stop pouring water into a cup using only passive acoustic sensing (audio signals) — no cameras, no weight sensors, just sound.
 
 ---
 
-## Overview
+## 📖 Overview
 
 When water is poured into a cup, the acoustic resonance of the vessel changes as the water level rises. This project captures those changes using a microphone, extracts audio features, and trains a classifier to distinguish between "not full" and "nearly full" states.
 
 Submitted as a Machine Learning course project at **Sami Shamoon College of Engineering (SCE)**, Department of Electrical and Electronics Engineering.
 
-**Presenter:** Dmitri Bakhobsky  
-**Authors:** Tomer Nor Milkov, Nikita Bodovsky, Oren, Or
+**Lecturer:** Dmitry Bakhovsky  
+**Authors:** Tomer Nur Milkov, Nikita Budovski, Oren, Or
 
 ---
 
-## How It Works
+## ⚙️ How It Works
 
-1. **Record** water being poured into a cup (empty → full)
-2. **Slice** each recording into 0.5-second windows
-3. **Extract** acoustic features from every window
-4. **Label** windows: last 10% of the recording = `1` (full), rest = `0` (not full)
-5. **Train** a classifier on those labeled features
-6. **Predict** fill state from new audio in real time
-
----
-
-## Dataset
-
-- **119 recordings** across 8 cup types
-- **Cup materials:** Glass (×4), Plastic, Cardboard (×3)
-- **~15 recordings per cup type** for balanced representation
-- **1,495 samples** total after windowing
-
-Recordings were made under consistent conditions: same room, same tap, fixed microphone distance, quiet environment.
+Our system operates through a sequential pipeline:
+1. **Record & Clean:** Capture liquid pouring audio, applying non-stationary noise profiling to strip out ambient faucet/pump hums.
+2. **Trim & Frame:** Isolate the true boundaries of the pour event automatically, slicing signal streams into highly responsive 50ms frames with a 50% overlap.
+3. **Extract Transient Features:** Map frequencies within the 1000Hz - 8000Hz band to compute 13 MFCCs alongside their velocity ($\Delta$) and acceleration ($\Delta^2$) derivatives.
+4. **Train & Tune Gradient Boosters:** Train a LightGBM binary classifier via optimized parameter search using GroupKFold cross-validation to recognize the final $\ge 90\%$ capacity point.
+5. **Real-Time Guardrails:** Run model probability projections through a 10-frame causal moving average to prevent immediate splash artifacts from triggering early faucet closures.
 
 ---
 
-## Features Extracted
+## 🗂️ Dataset
 
-For each 0.5-second audio window, the following features are computed (mean + std = 2 values each):
+- **120 recordings** across 8 cup types.
+- **Cup materials:** Glass, Plastic, Cardboard.
+- **~15 recordings per cup type** for balanced representation.
+- **1,495 samples** total after windowing.
+
+Recordings were made under consistent conditions: same room, same tap, fixed microphone distance, and a quiet environment.
+
+---
+
+## 🎛️ Features Extracted
+
+For each 50ms audio frame, the pipeline concentrates feature extraction inside the primary liquid resonance passband (1000 Hz to 8000 Hz):
 
 | Feature | Description |
 |---|---|
@@ -50,139 +50,136 @@ For each 0.5-second audio window, the following features are computed (mean + st
 | **Spectral Bandwidth** | Spread of energy around the centroid |
 | **Spectral Rolloff** | Frequency below which 85% of energy falls |
 
-**Total: 32 features per sample**
+**Total: 56 features per sample (including dynamic delta/delta2 differentials and spectral contrast bands)**
 
 ---
 
-## Models Evaluated
+## 🧠 Models Evaluated
 
-All models were evaluated with **5-Fold GroupKFold Cross-Validation**, grouping by recording to prevent data leakage between windows from the same file.
+All models were evaluated with **GroupKFold Cross-Validation** (5 folds), grouping by recording file to prevent window leakage. Models were optimized to balance micro-latency against false-positive premature stops.
 
-| Model | Accuracy | Precision | Recall | F1 |
-|---|---|---|---|---|
-| Logistic Regression | 95.85% | 77.71% | 53.37% | 62.76% |
-| k-NN (k=5) | 96.12% | 75.29% | 62.58% | 68.07% |
-| **Random Forest** | **96.32%** | **83.93%** | 56.47% | **67.18%** |
+| Model | Precision | Recall | F1-Score | AUC-ROC | Avg Latency ($\Delta t$) |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **LightGBM** | **78.11%** | **97.62%** | **0.868** | **0.961** | **+0.08 s** |
+| Random Forest | 67.81% | 73.06% | 0.703 | 0.947 | -1.90 s |
+| Extra Trees | 68.34% | 72.37% | 0.702 | 0.949 | -1.76 s |
+| HistGradientBoosting | 60.92% | 80.49% | 0.692 | 0.955 | -2.19 s |
 
-**Random Forest** was selected as the final model for its highest accuracy and precision, and its ability to provide feature importance analysis.
-
-### Confusion Matrix (Random Forest)
-
-|  | Predicted: Not Full | Predicted: Full |
-|---|---|---|
-| **Actual: Not Full** | 1384 ✅ | 12 ❌ |
-| **Actual: Full** | 43 ❌ | 56 ✅ |
-
+*Note: LightGBM vastly outperforms classical configurations due to gradient-based one-side sampling, achieving an exceptionally high recall (97.62%), meaning it almost never misses a true full event, while maintaining a remarkably precise stop latency.*
 ---
 
-## Top Features (Feature Importance)
+## 🔍 Feature Ablation & Importance
 
-The Random Forest model revealed that **MFCC features dominate** the decision — particularly their standard deviation, which captures how much the spectral shape varies within each window.
+Ablation analysis (`ablation_results.csv`) confirmed that modeling the **temporal velocity** of the acoustic change is crucial:
+- **All Features (56):** F1 = **0.868**, AUC-ROC = **0.961**
+- **No Delta/Delta-Delta (28):** F1 = 0.585, AUC-ROC = 0.932
+- **MFCC Baseline Only (19):** F1 = 0.573, AUC-ROC = 0.911
 
-```
-1. mfcc_0_std       ~0.083
-2. mfcc_2_mean      ~0.060
-3. mfcc_5_mean      ~0.057
-4. mfcc_1_std       ~0.053
-5. bandwidth_mean   ~0.051
-6. centroid_std     ~0.045
-7. rms_mean         ~0.041
-8. mfcc_0_mean      ~0.039
-9. mfcc_3_mean      ~0.038
-10. rolloff_std     ~0.035
-```
+This proves that the classifier is tracking the *dynamic path* of the Helmholtz resonance shift as the physical empty volume of the cup contracts, rather than static volume thresholds.
 
-This confirms the model is detecting **resonance changes** (frequency structure), not just volume.
-
+The top feature groups driving the LightGBM decisions are visualized in `images/feature_importance_LightGBM.png`.
 ---
 
-## Project Structure
+## 📂 Project Structure
 
-```
+```text
 .
-├── recordings/              # Raw WAV recordings, organized by cup type
-│   ├── Glass 1/
-│   ├── Glass 2/
-│   ├── Plastic/
-│   └── ...
+├── data/
+│   ├── raw/                   # Raw .wav recordings
+│   ├── clean/                 # Noise-reduced audio files
+│   ├── processed/             # Subfolder for windowed baseline data
+│   │   └── features.csv       # Windowed classical regression dataset
+│   └── features_labeled.csv   # Final frame-level classification dataset
 │
-├── build_dataset.py         # Slice recordings → extract features → save CSV
-├── train_model.py           # Train & evaluate all models with cross-validation
-├── RandomForest.py          # Train and save the final production model
-├── FirstCode.py             # Exploratory: waveform visualization
+├── src/                       # Python pipeline scripts
+│   ├── whitenoise.py          # Step 1: Applies non-stationary noise reduction
+│   ├── label_and_extract.py   # Step 2: Extracts targeted MFCCs & derivatives
+│   ├── tune_models.py         # Step 3: Trains & tunes LightGBM / XGBoost
+│   ├── plot_prediction.py     # Step 4: Visualizes real-time moving averages
+│   └── plot_spectrogram.py    # Step 5: Visualizes Helmholtz resonance
 │
-├── dataset_graph.py         # Plot recording counts per cup type
-├── confusion_matrix_graph.py# Plot the Random Forest confusion matrix
-├── model_comparison_graph.py# Bar chart comparing model metrics
+├── models/                    # Model binary and tuning performance metrics
+│   ├── best_model.pkl         # Saved production LightGBM pipeline
+│   ├── results_summary.csv    # Cross-validation performance comparisons
+│   ├── results_extended.csv   # Deep metric breakdowns per configuration
+│   └── ablation_results.csv   # Feature contribution and ablation analysis
 │
-├── water_dataset.csv        # Generated feature dataset
-├── final_water_model.pkl    # Saved Random Forest model (joblib)
+├── images/                    # Visual assets rendered in documentation
+│   ├── 01_fill_level.png
+│   ├── 02_probability.png
+│   ├── 03_spectrogram_centroid.png
+│   ├── model_comparison.png
+│   ├── feature_importance_LightGBM.png
+│   └── feature_importance_Gradient_Boosting.png
 │
-└── dataset_distribution.png
-    confusion_matrix.png
-    feature_importance.png
-    model_comparison.png
+├── docs/                      # Project reports and documentation
+│   ├── lab_report.docx        # English Laboratory Report
+│   ├── ML_Report_Hebrew.pdf   # Final Project Report (Hebrew)
+│   └── documantation.docx     # Internal engineering logic
+│
+├── .gitignore
+├── requirements.txt
+└── README.md
 ```
-
 ---
 
-## Setup & Usage
+## 🚀 Setup & Usage
 
 ### Requirements
+Ensure you have Python 3.10+ installed, then install the required dependencies:
 
 ```bash
-pip install librosa numpy pandas scikit-learn matplotlib joblib
+pip install -r requirements.txt
+```
+### Running the Pipeline
+Place your raw `.wav` recordings inside `data/raw/` (organized by cup folders), then run the scripts from the root directory in sequential order:
+
+**1. Clean Background Noise**
+```bash
+python src/whitenoise.py
 ```
 
-### 1. Build the dataset
-
-Place your WAV recordings under `recordings/<cup_type>/` then run:
-
+**2. Extract & Label Features**
 ```bash
-python build_dataset.py
+python src/label_and_extract.py
 ```
 
-This produces `water_dataset.csv`.
-
-### 2. Train and evaluate models
-
+**3. Train & Tune Models**
 ```bash
-python train_model.py
+python src/tune_models.py
 ```
 
-Prints cross-validation scores, confusion matrix, and classification report for all three models. Also outputs feature importance rankings.
-
-### 3. Save the final model
-
+**4. Generate Prediction Dashboards**
 ```bash
-python RandomForest.py
+python src/plot_prediction.py
 ```
-
-Saves `final_water_model.pkl` for deployment.
-
-### 4. Generate charts
-
+**5. Visualize Acoustic Resonance**
 ```bash
-python dataset_graph.py
-python model_comparison_graph.py
-python confusion_matrix_graph.py
+python src/plot_spectrogram.py
 ```
 
 ---
 
-## Key Findings
+## 📊 Key Findings
 
-- **Acoustic-only detection works.** A Random Forest classifier achieves ~96% accuracy with no visual or weight sensors.
-- **MFCC features are most informative.** The spectral shape of the sound, not its volume, is what gives away the fill level.
-- **GroupKFold is essential.** Without grouping by recording, windows from the same recording appear in both train and test sets, inflating scores artificially.
-- **Recall for "full" class is the main challenge** (56%). The "full" class is rare (last 10% of recordings), creating class imbalance. Future work: SMOTE oversampling, adjusted class weights, or a lower classification threshold.
+- **Acoustic-only detection works.** A LightGBM classifier achieves an F1-Score of 0.868, accurately triggering a stop command with an average latency of just +0.08 seconds.
+- **Spectral shape is key.** The spectral centroid and MFCC derivatives track the Helmholtz resonance, proving the model relies on physical acoustic shifts rather than just volume.
+- **Physical Smoothing is essential.** Applying a rolling causal average and enforcing monotonicity prevents sudden splashing noises from triggering false-positive stops.
+- **GroupKFold prevents leakage.** Without grouping by recording, windows from the same recording appear in both train and test sets, artificially inflating scores.
 
 ---
 
-## Future Improvements
+### Visualizing Model Performance
 
-- Larger, more diverse dataset (more cup types, sizes, materials)
-- More precise labeling of the actual moment the cup becomes full
-- Evaluation in noisy environments
-- Real-time inference pipeline (stream audio → predict → alert)
-- Deep learning approaches (CNN on spectrograms, LSTM on feature sequences)
+![Model Baseline Comparisons](images/model_comparison.png)
+![Fill Level Tracking](images/01_fill_level.png)
+![Model Prediction Probability](images/02_probability.png)
+![Spectrogram & Spectral Centroid](images/03_spectrogram_centroid.png)
+
+---
+
+## 🔮 Future Improvements
+- Larger, more diverse dataset (more cup types, sizes, materials).
+- Data augmentation with background noise to improve robustness in active environments.
+- Real-time streaming implementation for embedded hardware deployment.
+- Online adaptation to new cup types using few-shot learning.
